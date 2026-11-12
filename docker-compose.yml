@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: agri-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agriforecasting}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agriforecasting}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agri-network
+
+  # 2. Python Model-Serving Service (FastAPI + LightGBM)
+  python-inference:
+    build:
+      context: ./model-service
+      dockerfile: Dockerfile
+    container_name: agri-python-inference
+    restart: unless-stopped
+    ports:
+      - "${MODEL_SERVICE_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - agri-network
+
+  # 3. Main Java Backend (Spring Boot 3.3.5)
+  java-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agri-java-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python-inference:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/agriforecasting}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      MODEL_SERVICE_URL: http://python-inference:8000
+    ports:
+      - "${JAVA_BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agri-network
+
+  # 4. Frontend Web Application (Next.js 16)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agri-frontend
+    restart: unless-stopped
+    depends_on:
+      - java-backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - agri-network
+
+  # 5. Reverse Proxy (Nginx)
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: agri-reverse-proxy
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - java-backend
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - agri-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  agri-network:
+    driver: bridge
