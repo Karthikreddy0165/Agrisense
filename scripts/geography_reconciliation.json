@@ -1,0 +1,11 @@
+{
+  "states_count": 30,
+  "districts_count": 913,
+  "mandis_count": 2643,
+  "mandis_with_coords": 151,
+  "mandis_null_coords": 2492,
+  "commodities_count": 15,
+  "varieties_count": 262,
+  "verified_coords_count": 151,
+  "unresolved_count": 2492
+}

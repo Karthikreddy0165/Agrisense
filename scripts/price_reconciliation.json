@@ -1,0 +1,10 @@
+{
+  "total_source_rows": 1171101,
+  "duplicates_dropped": 34994,
+  "total_inserted_rows": 1136107,
+  "min_observation_date": "2025-06-12",
+  "max_observation_date": "2026-04-19",
+  "mandis_with_prices": 2643,
+  "commodities_with_prices": 10,
+  "execution_time_seconds": 15.75
+}
