@@ -1,0 +1,34 @@
+{
+  "passed": [
+    "Test 1: Direct Dashboard Access (No Auth)",
+    "Test 2: Multi-Language i18n & localStorage Persistence",
+    "Test 3: Location System (Manual Haryana Selection)",
+    "Test 4: GPS Location Precedence (Haryana Coordinates -> Karnal APMC)",
+    "Test 5: 14-Day Forecast (Non-Flat Curve: spread=827\u20b9, std=274.1\u20b9)",
+    "Test 6: Dynamic Commodity & Variety Reactive Sync",
+    "Test 7: Market Explorer (29 Mandis & Haryana Filter)",
+    "Test 8: Market Comparison Multi-Mandi Analysis",
+    "Test 9: Saved Markets Watchlist Persistence",
+    "Test 10: Prediction History & Model Accuracy Backtest"
+  ],
+  "failed": [],
+  "blocked": [],
+  "diagnostics": {
+    "forecast_prices": [
+      2024,
+      2026,
+      2029,
+      2031,
+      2037,
+      2100,
+      2181,
+      2254,
+      2322,
+      2407,
+      2499,
+      2607,
+      2725,
+      2851
+    ]
+  }
+}

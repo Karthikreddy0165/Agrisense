@@ -1,0 +1,17 @@
+{
+  "passed": [
+    "Test 1: Direct Dashboard Access (No Auth)",
+    "Test 2: Location Selector Portal Positioning & Manual Selection",
+    "Test 3: Complete Application-Wide Internationalisation (6 Regional Languages)",
+    "Test 4: Historical Prices & Market Detail Data Integrity",
+    "Test 5: Reconciled Price Forecast Chart & Advisory Banner",
+    "Test 6: Persistent Prediction History UI & Run Inspector Modal",
+    "Test 7: Dynamic Forecast Run Persistence & Verification in History",
+    "Test 8: Settings Page Language & Preference Switching",
+    "Test 9: Saved Markets Watchlist Flow",
+    "Test 10: Mobile Responsiveness & Viewport Containment"
+  ],
+  "failed": [],
+  "blocked": [],
+  "diagnostics": {}
+}
