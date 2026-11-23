@@ -18,6 +18,7 @@ import {
   AlertCircle,
   ChevronDown,
   Sparkles,
+  GitCompare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,8 +29,9 @@ import { COMMODITIES } from '@/lib/data/commodities';
 import { useSavedMarkets } from '@/lib/hooks/useSavedMarkets';
 import { useLocation } from '@/lib/context/LocationContext';
 import { useLanguage } from '@/lib/context/LanguageContext';
-import { formatPrice } from '@/lib/utils/formatters';
-import { ApiService } from '@/lib/services/api';
+import { formatPrice, formatDateShort } from '@/lib/utils/formatters';
+import { ApiService, PriceHistorySummary, TradedCommodityItem, ForecastResult } from '@/lib/services/api';
+import { SelectedMarketPanel } from '@/components/market/SelectedMarketPanel';
 import { cn } from '@/lib/utils/cn';
 
 const RADIUS_OPTIONS = [10, 25, 50, 100];
@@ -56,13 +58,101 @@ export default function NearbyMandisPage() {
   const [selectedVariety, setSelectedVariety] = useState<string>('all');
   const [selectedState, setSelectedState] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [onlyTradingCrop, setOnlyTradingCrop] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'distance' | 'price-desc' | 'price-asc'>('distance');
   const [selectedMandiId, setSelectedMandiId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
 
+  // Detail panel synchronized state
+  const [selectedMandiDetail, setSelectedMandiDetail] = useState<any | null>(null);
+  const [mandiPriceSummary, setMandiPriceSummary] = useState<PriceHistorySummary | null>(null);
+  const [mandiTradedCommodities, setMandiTradedCommodities] = useState<TradedCommodityItem[]>([]);
+  const [mandiForecast, setMandiForecast] = useState<ForecastResult | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isForecastLoading, setIsForecastLoading] = useState(false);
+  const reqSequenceRef = useRef(0);
+  const currentCrop = useMemo(() => COMMODITIES.find((c) => c.id === selectedCommodity) || COMMODITIES[0], [selectedCommodity]);
+
   const { isSaved, toggle } = useSavedMarkets();
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Synchronize detailed mandi intelligence whenever selected mandi, commodity or variety changes
+  useEffect(() => {
+    if (!selectedMandiId) {
+      setSelectedMandiDetail(null);
+      setMandiPriceSummary(null);
+      setMandiTradedCommodities([]);
+      setMandiForecast(null);
+      return;
+    }
+
+    const currentReq = ++reqSequenceRef.current;
+    const mandiObj = allMandis.find((m) => m.id === selectedMandiId);
+    if (mandiObj) {
+      setSelectedMandiDetail(mandiObj);
+    } else {
+      setSelectedMandiDetail({ id: selectedMandiId, name: selectedMandiId });
+      ApiService.getMandi(selectedMandiId).then((m) => {
+        if (m && currentReq === reqSequenceRef.current) {
+          setSelectedMandiDetail(m);
+        }
+      });
+    }
+
+    setIsDetailLoading(true);
+    setIsHistoryLoading(true);
+    setIsForecastLoading(true);
+
+    // 1. Fetch traded commodities
+    ApiService.getMandiCommodities(selectedMandiId)
+      .then((comms) => {
+        if (currentReq === reqSequenceRef.current) {
+          setMandiTradedCommodities(comms || []);
+        }
+      })
+      .finally(() => {
+        if (currentReq === reqSequenceRef.current) {
+          setIsDetailLoading(false);
+        }
+      });
+
+    // 2. Fetch price summary
+    ApiService.getPriceHistorySummary(
+      selectedMandiId,
+      selectedCommodity,
+      selectedVariety === 'all' ? undefined : selectedVariety,
+      90
+    )
+      .then((summary) => {
+        if (currentReq === reqSequenceRef.current) {
+          setMandiPriceSummary(summary || null);
+        }
+      })
+      .finally(() => {
+        if (currentReq === reqSequenceRef.current) {
+          setIsHistoryLoading(false);
+        }
+      });
+
+    // 3. Fetch forecast
+    ApiService.getForecast(
+      selectedMandiId,
+      selectedCommodity,
+      selectedVariety === 'all' ? undefined : selectedVariety
+    )
+      .then((fc) => {
+        if (currentReq === reqSequenceRef.current) {
+          setMandiForecast(fc || null);
+        }
+      })
+      .finally(() => {
+        if (currentReq === reqSequenceRef.current) {
+          setIsForecastLoading(false);
+        }
+      });
+  }, [selectedMandiId, selectedCommodity, selectedVariety, allMandis]);
 
   // 1. Fetch complete States from API
   useEffect(() => {
@@ -89,9 +179,17 @@ export default function NearbyMandisPage() {
       const params = new URLSearchParams(window.location.search);
       const sParam = params.get('stateId');
       const mParam = params.get('mandiId');
+      const cParam = params.get('commodityId') || params.get('commodity');
+      const vParam = params.get('varietyId') || params.get('variety');
       if (sParam) {
         setSelectedState(sParam);
         if (selectedRadius === null) setSelectedRadius(100);
+      }
+      if (cParam) {
+        setSelectedCommodity(cParam);
+      }
+      if (vParam) {
+        setSelectedVariety(vParam);
       }
       if (mParam) {
         setSelectedMandiId(mParam);
@@ -204,6 +302,11 @@ export default function NearbyMandisPage() {
       result = result.filter((m) => m.distanceKm != null && m.distanceKm <= selectedRadius);
     }
 
+    // Only markets with active prices for selected crop
+    if (onlyTradingCrop) {
+      result = result.filter((m) => m.latestPrice != null);
+    }
+
     // Sorting
     result.sort((a, b) => {
       if (sortBy === 'distance') {
@@ -225,12 +328,19 @@ export default function NearbyMandisPage() {
     });
 
     return result;
-  }, [mandisWithCalculations, searchQuery, selectedState, selectedRadius, effectiveCoords, sortBy]);
+  }, [mandisWithCalculations, searchQuery, selectedState, selectedRadius, effectiveCoords, onlyTradingCrop, sortBy]);
+
+  // Auto-select first mandi if none selected so screen never feels empty or broken
+  useEffect(() => {
+    if (!selectedMandiId && filteredMandis.length > 0) {
+      setSelectedMandiId(filteredMandis[0].id);
+    }
+  }, [filteredMandis, selectedMandiId]);
 
   // Reset pagination visible count when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, selectedState, selectedRadius, selectedCommodity, sortBy]);
+  }, [searchQuery, selectedState, selectedRadius, selectedCommodity, onlyTradingCrop, sortBy]);
 
   const displayedMandis = useMemo(() => {
     return filteredMandis.slice(0, visibleCount);
@@ -256,12 +366,14 @@ export default function NearbyMandisPage() {
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
     selectedState !== 'all' ||
+    onlyTradingCrop ||
     (selectedRadius != null && effectiveCoords != null);
 
   const clearAllFilters = () => {
     setSearchQuery('');
     setSelectedState('all');
     setSelectedRadius(null);
+    setOnlyTradingCrop(false);
     setSortBy('distance');
   };
 
@@ -421,6 +533,18 @@ export default function NearbyMandisPage() {
                 &le; {r} km
               </button>
             ))}
+
+            <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer bg-slate-50 hover:bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 transition-colors">
+              <input
+                type="checkbox"
+                checked={onlyTradingCrop}
+                onChange={(e) => setOnlyTradingCrop(e.target.checked)}
+                className="w-3.5 h-3.5 text-emerald-700 rounded border-slate-300 focus:ring-emerald-600 cursor-pointer"
+              />
+              <span>Only markets reporting {COMMODITIES.find((c) => c.id === selectedCommodity)?.name || 'crop'}</span>
+            </label>
           </div>
 
           {hasActiveFilters && (
@@ -460,6 +584,27 @@ export default function NearbyMandisPage() {
           </div>
         )}
       </div>
+
+      {/* Selected Market Live Intelligence Panel */}
+      {selectedMandiDetail && (
+        <div id="selected-market-intelligence" className="scroll-mt-20">
+          <SelectedMarketPanel
+            mandi={selectedMandiDetail}
+            commodityId={selectedCommodity}
+            varietyId={selectedVariety}
+            isDetailLoading={isDetailLoading}
+            isHistoryLoading={isHistoryLoading}
+            isForecastLoading={isForecastLoading}
+            priceSummary={mandiPriceSummary}
+            tradedCommodities={mandiTradedCommodities}
+            forecast={mandiForecast}
+            isSaved={isSaved(selectedMandiDetail.id, selectedCommodity)}
+            onToggleSave={() => toggle(selectedMandiDetail.id, selectedCommodity)}
+            onSelectCommodity={(cId) => setSelectedCommodity(cId)}
+            onClose={() => setSelectedMandiId(null)}
+          />
+        </div>
+      )}
 
       {/* Mobile View Toggle */}
       <div className="lg:hidden flex items-center justify-center p-1 bg-slate-200 rounded-lg max-w-xs mx-auto">
@@ -550,6 +695,7 @@ export default function NearbyMandisPage() {
                 return (
                   <div
                     key={mandi.id}
+                    data-mandi-card="true"
                     ref={(el) => {
                       cardRefs.current[mandi.id] = el;
                     }}
@@ -559,14 +705,19 @@ export default function NearbyMandisPage() {
                     className={cn(
                       'bg-white rounded-xl border p-4 transition-all cursor-pointer',
                       isCurrentSelected
-                        ? 'border-green-600 ring-2 ring-green-600/20 shadow-md bg-green-50/20'
-                        : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                        ? 'border-emerald-600 ring-2 ring-emerald-600/30 shadow-md bg-emerald-50/15'
+                        : 'border-slate-200 hover:border-emerald-300 hover:shadow-xs'
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="font-bold text-slate-900 text-base">{mandi.name}</h3>
+                          {isCurrentSelected && (
+                            <Badge className="bg-emerald-800 text-white text-[10px] px-2 py-0">
+                              Selected
+                            </Badge>
+                          )}
                           {mandi.distanceKm != null ? (
                             <Badge variant="secondary" className="text-[11px] bg-slate-100 text-slate-700">
                               {mandi.distanceKm} km away
@@ -602,7 +753,7 @@ export default function NearbyMandisPage() {
                     <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100">
                       <div>
                         <span className="text-[11px] text-slate-500 block uppercase font-semibold">
-                          Modal Price ({COMMODITIES.find((c) => c.id === selectedCommodity)?.name})
+                          Usual Price ({COMMODITIES.find((c) => c.id === selectedCommodity)?.name})
                         </span>
                         <div className="flex items-baseline mt-0.5">
                           {mandi.latestPrice != null ? (
@@ -614,10 +765,15 @@ export default function NearbyMandisPage() {
                             </>
                           ) : (
                             <span className="text-xs font-semibold text-slate-400">
-                              {t('price.unavailable', 'Price pending')}
+                              {currentCrop.name} not reported
                             </span>
                           )}
                         </div>
+                        {mandi.observationDate && mandi.latestPrice != null && (
+                          <span className="text-[10px] text-slate-500 block mt-0.5">
+                            Observed on {formatDateShort(mandi.observationDate)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-right">
@@ -633,34 +789,40 @@ export default function NearbyMandisPage() {
                           )}
                         >
                           {mandi.trendDirection === 'Rising'
-                            ? t('price.trend.rising', 'Rising')
+                            ? 'Rising trend'
                             : mandi.trendDirection === 'Falling'
-                            ? t('price.trend.falling', 'Falling')
-                            : t('price.trend.stable', 'Stable')}
+                            ? 'Falling trend'
+                            : 'Stable price'}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
-                      <Link
-                        href={`/market/${mandi.id}?commodity=${selectedCommodity}`}
-                        className="flex-1"
-                        onClick={(e) => e.stopPropagation()}
+                      <Button
+                        variant={isCurrentSelected ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedMandiId(mandi.id);
+                          const el = document.getElementById('selected-market-intelligence');
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className={cn(
+                          'flex-1 text-xs h-8',
+                          isCurrentSelected ? 'bg-emerald-800 text-white hover:bg-emerald-900' : 'text-slate-700'
+                        )}
                       >
-                        <Button variant="outline" size="sm" className="w-full text-xs text-slate-700 h-8">
-                          <Store className="w-3.5 h-3.5 mr-1" />
-                          {t('btn.viewMarket', 'Market Profile')}
-                        </Button>
-                      </Link>
+                        <Sparkles className="w-3.5 h-3.5 mr-1" />
+                        {isCurrentSelected ? 'Viewing Live Details' : 'Select Market'}
+                      </Button>
 
                       <Link
-                        href={`/forecast?mandiId=${mandi.id}&commodityId=${selectedCommodity}`}
-                        className="flex-1"
+                        href={`/compare?mandiIds=${mandi.id}&commodityId=${selectedCommodity}`}
+                        className="shrink-0"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Button size="sm" className="w-full text-xs bg-green-700 hover:bg-green-800 text-white h-8">
-                          <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                          {t('btn.viewForecast', '14-Day Forecast')}
+                        <Button variant="outline" size="sm" className="text-xs text-slate-700 h-8 px-2.5" title="Compare this market">
+                          <GitCompare className="w-3.5 h-3.5" />
                         </Button>
                       </Link>
                     </div>

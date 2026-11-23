@@ -21,11 +21,11 @@ export function Sidebar() {
 
   const NAV_ITEMS = [
     { href: '/', label: t('nav.dashboard', 'Dashboard'), icon: LayoutDashboard },
-    { href: '/nearby-mandis', label: t('nav.marketExplorer', 'Market Explorer'), icon: Compass },
-    { href: '/forecast', label: t('nav.forecast', 'Price Forecasts'), icon: TrendingUp },
-    { href: '/compare', label: t('nav.compare', 'Compare Markets'), icon: GitCompare },
-    { href: '/prediction-history', label: t('nav.predictionHistory', 'Prediction History'), icon: History },
-    { href: '/saved', label: t('nav.saved', 'Saved Markets'), icon: Bookmark },
+    { href: '/nearby-mandis', label: t('nav.marketExplorer', 'Find Nearby Markets'), icon: Compass },
+    { href: '/forecast', label: t('nav.forecast', 'Expected Prices (14-Day)'), icon: TrendingUp },
+    { href: '/compare', label: t('nav.compare', 'Compare Market Prices'), icon: GitCompare },
+    { href: '/prediction-history', label: t('nav.predictionHistory', 'Previous Forecasts'), icon: History },
+    { href: '/saved', label: t('nav.saved', 'My Saved Markets'), icon: Bookmark },
     { href: '/settings', label: t('nav.settings', 'Settings'), icon: Settings },
   ];
 

@@ -9,6 +9,7 @@ import {
   History,
   Bookmark,
   Settings,
+  GitCompare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useLanguage } from '@/lib/context/LanguageContext';
@@ -19,11 +20,11 @@ export function MobileNav() {
 
   const NAV_ITEMS = [
     { href: '/', label: t('nav.dashboard', 'Dashboard'), icon: LayoutDashboard },
-    { href: '/nearby-mandis', label: t('nav.marketExplorer', 'Explorer'), icon: Compass },
-    { href: '/forecast', label: t('nav.forecast', 'Forecast'), icon: TrendingUp },
-    { href: '/prediction-history', label: t('nav.predictionHistory', 'History'), icon: History },
+    { href: '/nearby-mandis', label: t('nav.marketExplorer', 'Markets'), icon: Compass },
+    { href: '/forecast', label: t('nav.forecast', 'Expected'), icon: TrendingUp },
+    { href: '/compare', label: t('nav.compare', 'Compare'), icon: GitCompare },
+    { href: '/prediction-history', label: t('nav.predictionHistory', 'Previous'), icon: History },
     { href: '/saved', label: t('nav.saved', 'Saved'), icon: Bookmark },
-    { href: '/settings', label: t('nav.settings', 'Settings'), icon: Settings },
   ];
 
   return (
