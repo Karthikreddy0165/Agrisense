@@ -24,6 +24,9 @@ export interface LocationContextType {
   stateId: string | null;
   districtId: string | null;
   mandiId: string | null;
+  isPickerOpen: boolean;
+  openPicker: () => void;
+  closePicker: () => void;
   detectLocation: () => Promise<void>;
   setManualLocation: (
     stateId: string,
@@ -55,6 +58,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [stateId, setStateId] = useState<string | null>(null);
   const [districtId, setDistrictId] = useState<string | null>(null);
   const [mandiId, setMandiId] = useState<string | null>(null);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  const openPicker = useCallback(() => setIsPickerOpen(true), []);
+  const closePicker = useCallback(() => setIsPickerOpen(false), []);
 
   // Initialize from localStorage
   useEffect(() => {
@@ -326,6 +333,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         stateId,
         districtId,
         mandiId,
+        isPickerOpen,
+        openPicker,
+        closePicker,
         detectLocation,
         setManualLocation,
         clearLocation,

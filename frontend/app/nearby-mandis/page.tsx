@@ -43,6 +43,8 @@ export default function NearbyMandisPage() {
     status: locationStatus,
     stateId: locationStateId,
     detectLocation,
+    setManualLocation,
+    openPicker,
   } = useLocation();
 
   const [statesList, setStatesList] = useState<any[]>(SEED_STATES);
@@ -81,7 +83,22 @@ export default function NearbyMandisPage() {
       .finally(() => setLoadingMandis(false));
   }, [selectedCommodity]);
 
-  // Synchronize initial state with saved location state if present
+  // Synchronize initial state with saved location state if present or URL query parameters
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const sParam = params.get('stateId');
+      const mParam = params.get('mandiId');
+      if (sParam) {
+        setSelectedState(sParam);
+        if (selectedRadius === null) setSelectedRadius(100);
+      }
+      if (mParam) {
+        setSelectedMandiId(mParam);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (locationStateId && selectedState === 'all') {
       setSelectedState(locationStateId);
@@ -193,6 +210,9 @@ export default function NearbyMandisPage() {
         if (a.distanceKm != null && b.distanceKm != null) return a.distanceKm - b.distanceKm;
         if (a.distanceKm != null) return -1;
         if (b.distanceKm != null) return 1;
+        // If distances are pending, show mandis with active price observations first
+        if (a.latestPrice != null && b.latestPrice == null) return -1;
+        if (a.latestPrice == null && b.latestPrice != null) return 1;
         return a.name.localeCompare(b.name);
       }
       if (sortBy === 'price-desc') {
@@ -216,20 +236,22 @@ export default function NearbyMandisPage() {
     return filteredMandis.slice(0, visibleCount);
   }, [filteredMandis, visibleCount]);
 
-  // High performance map markers list
+  // High performance map markers list (capped in all-India view to keep map at 60fps)
   const mapMandis = useMemo(() => {
-    return filteredMandis
-      .filter((m) => m.hasCoords)
-      .map((m) => ({
-        id: m.id,
-        name: m.name,
-        latitude: m.latitude!,
-        longitude: m.longitude!,
-        distanceKm: m.distanceKm,
-        latestPrice: m.latestPrice,
-        trendDirection: m.trendDirection,
-      }));
-  }, [filteredMandis]);
+    let list = filteredMandis.filter((m) => m.hasCoords);
+    if (selectedRadius === null && selectedState === 'all' && !searchQuery.trim()) {
+      list = list.slice(0, 150);
+    }
+    return list.map((m) => ({
+      id: m.id,
+      name: m.name,
+      latitude: m.latitude!,
+      longitude: m.longitude!,
+      distanceKm: m.distanceKm,
+      latestPrice: m.latestPrice,
+      trendDirection: m.trendDirection,
+    }));
+  }, [filteredMandis, selectedRadius, selectedState, searchQuery]);
 
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
@@ -243,10 +265,24 @@ export default function NearbyMandisPage() {
     setSortBy('distance');
   };
 
+  const handleStateFilterChange = (val: string) => {
+    setSelectedState(val);
+    if (val !== 'all') {
+      const stateMandi = allMandis.find((m) => m.stateId === val && m.latitude != null && m.longitude != null);
+      const coords = stateMandi ? { lat: stateMandi.latitude!, lon: stateMandi.longitude! } : undefined;
+      const stName = stateLookup.get(val) || val;
+      const label = stateMandi ? `${stateMandi.name}, ${stName}` : stName;
+      setManualLocation(val, stateMandi?.districtId, stateMandi?.id, coords, label);
+      if (selectedRadius === null) {
+        setSelectedRadius(100);
+      }
+    }
+  };
+
   const handleRadiusClick = (r: number | null) => {
     setSelectedRadius(r);
     if (r !== null && !effectiveCoords) {
-      detectLocation();
+      openPicker();
     }
   };
 
@@ -271,11 +307,18 @@ export default function NearbyMandisPage() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => openPicker()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors"
+            >
+              <MapPin className="w-3.5 h-3.5 text-slate-600" />
+              <span>{locationStatus === 'MANUAL' || locationStatus === 'DETECTED' ? 'Change Location' : 'Set Location'}</span>
+            </button>
+            <button
               onClick={() => detectLocation()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-800 border border-green-200 rounded-lg text-xs font-semibold hover:bg-green-100 transition-colors"
             >
               <Navigation className="w-3.5 h-3.5 text-green-700" />
-              <span>{t('loc.useLocation', 'Detect GPS Location')}</span>
+              <span>{t('loc.useLocation', 'Detect GPS')}</span>
             </button>
           </div>
         </div>
@@ -323,7 +366,7 @@ export default function NearbyMandisPage() {
             <select
               data-testid="state-filter-select"
               value={selectedState}
-              onChange={(e) => setSelectedState(e.target.value)}
+              onChange={(e) => handleStateFilterChange(e.target.value)}
               className="w-full h-9 px-3 text-xs border border-slate-200 rounded-lg bg-white text-slate-800 font-medium focus:ring-2 focus:ring-green-700 focus:outline-none"
             >
               <option value="all">All States ({allMandis.length} Mandis)</option>
@@ -362,7 +405,7 @@ export default function NearbyMandisPage() {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               )}
             >
-              All India
+              {selectedState !== 'all' ? `Entire State (${stateLookup.get(selectedState) || 'State'})` : 'All India'}
             </button>
             {RADIUS_OPTIONS.map((r) => (
               <button
@@ -398,14 +441,22 @@ export default function NearbyMandisPage() {
           <div className="mt-3 p-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-800">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Location needed to calculate distances for &le; {selectedRadius} km range.</span>
+              <span>Select a state or your market location to calculate distances for &le; {selectedRadius} km range.</span>
             </div>
-            <button
-              onClick={() => detectLocation()}
-              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded text-[11px] transition-colors shadow-sm"
-            >
-              Detect Location
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openPicker()}
+                className="px-2.5 py-1 bg-green-700 hover:bg-green-800 text-white font-semibold rounded text-[11px] transition-colors shadow-sm"
+              >
+                Set Location
+              </button>
+              <button
+                onClick={() => detectLocation()}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded text-[11px] transition-colors shadow-sm"
+              >
+                Detect GPS
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -464,11 +515,30 @@ export default function NearbyMandisPage() {
                 <AlertCircle className="w-8 h-8 text-slate-400" />
                 <h3 className="font-bold text-slate-900 text-sm">No Mandis Match Your Filter</h3>
                 <p className="text-xs text-slate-500 max-w-sm">
-                  Try expanding your distance radius or clearing the state and search filters.
+                  {selectedRadius != null
+                    ? `No mandis found within ≤ ${selectedRadius} km. Try expanding to 50 km or 100 km.`
+                    : 'Try expanding your distance radius or clearing the search filter.'}
                 </p>
-                <Button size="sm" onClick={clearAllFilters} className="mt-3 text-xs bg-green-700 text-white">
-                  {t('btn.clearFilters', 'Reset All Filters')}
-                </Button>
+                <div className="flex items-center gap-2 pt-2 flex-wrap justify-center">
+                  {selectedRadius != null && selectedRadius < 50 && (
+                    <Button size="sm" variant="outline" onClick={() => setSelectedRadius(50)} className="text-xs text-slate-700">
+                      Expand to &le; 50 km
+                    </Button>
+                  )}
+                  {selectedRadius != null && selectedRadius < 100 && (
+                    <Button size="sm" variant="outline" onClick={() => setSelectedRadius(100)} className="text-xs text-slate-700">
+                      Expand to &le; 100 km
+                    </Button>
+                  )}
+                  {selectedRadius != null && (
+                    <Button size="sm" variant="outline" onClick={() => setSelectedRadius(null)} className="text-xs text-slate-700">
+                      View {selectedState !== 'all' ? 'Entire State' : 'All India'}
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={clearAllFilters} className="text-xs bg-green-700 text-white">
+                    {t('btn.clearFilters', 'Reset All Filters')}
+                  </Button>
+                </div>
               </div>
             </Card>
           ) : (

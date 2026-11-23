@@ -174,7 +174,7 @@ export default function MandiMap({
           weight: isSelected ? 2.5 : 1.2,
         });
 
-        circle.bindPopup(popupHtml);
+        circle.bindPopup(() => buildPopupHtml(mandi));
         circle.on('click', () => {
           if (onSelectMandi) onSelectMandi(mandi.id);
         });
@@ -187,7 +187,7 @@ export default function MandiMap({
           zIndexOffset: isSelected ? 1000 : 0,
         });
 
-        marker.bindPopup(popupHtml);
+        marker.bindPopup(() => buildPopupHtml(mandi));
         marker.on('click', () => {
           if (onSelectMandi) onSelectMandi(mandi.id);
         });

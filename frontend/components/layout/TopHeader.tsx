@@ -17,13 +17,15 @@ export function TopHeader() {
     stateId,
     districtId,
     mandiId,
+    isPickerOpen,
+    openPicker,
+    closePicker,
     detectLocation,
     setManualLocation,
     clearLocation,
   } = useLocation();
 
   const [mounted, setMounted] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
   const [tempState, setTempState] = useState<string>(stateId || '');
   const [tempDistrict, setTempDistrict] = useState<string>(districtId || '');
   const [tempMandi, setTempMandi] = useState<string>(mandiId || '');
@@ -66,24 +68,26 @@ export function TopHeader() {
     }
   }, [tempDistrict, tempState]);
 
+  // Synchronize picker state when opened
+  useEffect(() => {
+    if (isPickerOpen) {
+      setTempState(stateId || '');
+      setTempDistrict(districtId || '');
+      setTempMandi(mandiId || '');
+      setSearchQuery('');
+    }
+  }, [isPickerOpen, stateId, districtId, mandiId]);
+
   // Handle ESC key to close modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showPicker) {
-        setShowPicker(false);
+      if (e.key === 'Escape' && isPickerOpen) {
+        closePicker();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showPicker]);
-
-  const openPicker = () => {
-    setTempState(stateId || '');
-    setTempDistrict(districtId || '');
-    setTempMandi(mandiId || '');
-    setSearchQuery('');
-    setShowPicker(true);
-  };
+  }, [isPickerOpen, closePicker]);
 
   const availableDistricts = tempState
     ? (districtsList.length > 0 ? districtsList : DISTRICTS.filter((d) => d.stateId === tempState))
@@ -129,17 +133,17 @@ export function TopHeader() {
 
       setManualLocation(tempState, tempDistrict || undefined, tempMandi || undefined, coords, label);
     }
-    setShowPicker(false);
+    closePicker();
   };
 
-  const modalContent = showPicker && mounted ? (
+  const modalContent = isPickerOpen && mounted ? (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="location-modal-title"
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
       onClick={(e) => {
-        if (e.target === e.currentTarget) setShowPicker(false);
+        if (e.target === e.currentTarget) closePicker();
       }}
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
@@ -157,7 +161,7 @@ export function TopHeader() {
             </div>
           </div>
           <button
-            onClick={() => setShowPicker(false)}
+            onClick={() => closePicker()}
             aria-label="Close dialog"
             className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-200/50 transition-colors"
           >
@@ -171,7 +175,7 @@ export function TopHeader() {
           <button
             onClick={() => {
               detectLocation();
-              setShowPicker(false);
+              closePicker();
             }}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl hover:bg-emerald-100 font-medium transition-colors group"
           >
@@ -272,7 +276,7 @@ export function TopHeader() {
             size="sm"
             onClick={() => {
               clearLocation();
-              setShowPicker(false);
+              closePicker();
             }}
             className="text-xs text-slate-600 hover:text-slate-900 border-slate-200"
           >

@@ -29,7 +29,17 @@ import { ApiService } from '@/lib/services/api';
 
 export default function HomePage() {
   const router = useRouter();
-  const { coordinates, locationLabel, status, stateId, districtId, mandiId, detectLocation } = useLocation();
+  const {
+    coordinates,
+    locationLabel,
+    status,
+    stateId,
+    districtId,
+    mandiId,
+    detectLocation,
+    setManualLocation,
+    openPicker,
+  } = useLocation();
   const { t } = useLanguage();
   const [detecting, setDetecting] = useState(false);
 
@@ -53,18 +63,16 @@ export default function HomePage() {
 
   // Synchronize with detected or manually chosen location in LocationContext
   useEffect(() => {
-    if (mandiId) {
-      setSelectedMandi(mandiId);
-      const m = SEED_MANDIS.find((item) => item.id === mandiId);
-      if (m) {
-        setSelectedState(m.stateId);
-        setSelectedDistrict(m.districtId);
-      }
-    } else if (stateId) {
+    if (stateId) {
       setSelectedState(stateId);
       if (districtId) {
         setSelectedDistrict(districtId);
       }
+      if (mandiId) {
+        setSelectedMandi(mandiId);
+      }
+    } else if (mandiId) {
+      setSelectedMandi(mandiId);
     }
   }, [mandiId, stateId, districtId]);
 
@@ -110,13 +118,25 @@ export default function HomePage() {
     ApiService.getDistricts(newStatId).then((dists) => {
       if (dists && dists.length > 0) {
         setDistrictsList(dists);
-        setSelectedDistrict(dists[0].id);
-        ApiService.getMandis({ districtId: dists[0].id }).then((mands) => {
+        const firstDist = dists[0].id;
+        setSelectedDistrict(firstDist);
+        ApiService.getMandis({ districtId: firstDist }).then((mands) => {
           if (mands && mands.length > 0) {
             setMandisList(mands);
-            setSelectedMandi(mands[0].id);
+            const firstMandi = mands[0];
+            setSelectedMandi(firstMandi.id);
+            const coords = firstMandi.latitude != null && firstMandi.longitude != null
+              ? { lat: firstMandi.latitude, lon: firstMandi.longitude }
+              : undefined;
+            const stateObj = statesList.find((s) => s.id === newStatId);
+            const label = `${firstMandi.name}, ${stateObj?.name || newStatId}`;
+            setManualLocation(newStatId, firstDist, firstMandi.id, coords, label);
+          } else {
+            setManualLocation(newStatId, firstDist);
           }
         });
+      } else {
+        setManualLocation(newStatId);
       }
     });
   };
@@ -126,9 +146,29 @@ export default function HomePage() {
     ApiService.getMandis({ districtId: distId }).then((mands) => {
       if (mands && mands.length > 0) {
         setMandisList(mands);
-        setSelectedMandi(mands[0].id);
+        const firstMandi = mands[0];
+        setSelectedMandi(firstMandi.id);
+        const coords = firstMandi.latitude != null && firstMandi.longitude != null
+          ? { lat: firstMandi.latitude, lon: firstMandi.longitude }
+          : undefined;
+        const stateObj = statesList.find((s) => s.id === selectedState);
+        const label = `${firstMandi.name}, ${stateObj?.name || selectedState}`;
+        setManualLocation(selectedState, distId, firstMandi.id, coords, label);
+      } else {
+        setManualLocation(selectedState, distId);
       }
     });
+  };
+
+  const handleMandiChange = (mId: string) => {
+    setSelectedMandi(mId);
+    const chosen = filteredMandis.find((m) => m.id === mId);
+    const coords = chosen?.latitude != null && chosen?.longitude != null
+      ? { lat: chosen.latitude, lon: chosen.longitude }
+      : undefined;
+    const stateObj = statesList.find((s) => s.id === selectedState);
+    const label = chosen ? `${chosen.name}, ${stateObj?.name || selectedState}` : undefined;
+    setManualLocation(selectedState, selectedDistrict, mId, coords, label);
   };
 
   const handleCommodityChange = (commId: string) => {
@@ -169,7 +209,7 @@ export default function HomePage() {
 
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <Link href="/nearby-mandis">
+            <Link href={`/nearby-mandis?stateId=${selectedState}&districtId=${selectedDistrict}&mandiId=${selectedMandi}`}>
               <Button className="bg-white text-green-900 hover:bg-green-50 font-semibold px-5 shadow">
                 <Compass className="w-4 h-4 mr-2 text-green-700" />
                 {t('btn.exploreNearby', 'Explore Nearby Mandis')}
@@ -262,7 +302,7 @@ export default function HomePage() {
             <select
               data-testid="home-mandi-select"
               value={selectedMandi}
-              onChange={(e) => setSelectedMandi(e.target.value)}
+              onChange={(e) => handleMandiChange(e.target.value)}
               className="w-full h-10 px-3 text-sm font-medium border border-slate-200 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-green-700 focus:outline-none"
             >
               {filteredMandis.map((m) => (
@@ -328,7 +368,7 @@ export default function HomePage() {
             <h2 className="text-lg font-bold text-slate-900">Market Price Highlights</h2>
             <p className="text-xs text-slate-500">Representative prices across major agricultural hubs as of 23 Nov 2026</p>
           </div>
-          <Link href="/nearby-mandis" className="text-xs font-semibold text-green-800 hover:underline flex items-center">
+          <Link href={`/nearby-mandis?stateId=${selectedState}`} className="text-xs font-semibold text-green-800 hover:underline flex items-center">
             {t('nav.marketExplorer', 'View All Mandis')} <ArrowRight className="w-3.5 h-3.5 ml-1" />
           </Link>
         </div>
