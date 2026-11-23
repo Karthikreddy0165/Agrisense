@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-11-23T18:32:03.495243",
+  "total_mandis_in_database": 2643,
+  "baseline_with_coordinates": 151,
+  "baseline_missing_coordinates": 2492,
+  "enriched_mandi_level": 247,
+  "enriched_district_level": 2150,
+  "preserved_seed_verified": 151,
+  "total_with_coordinates_post_enrichment": 2548,
+  "coverage_percentage": 96.41,
+  "unresolved_count": 95,
+  "newly_inserted_districts": 23,
+  "data_sources": [
+    "maharashtra_feature_data.csv (exact mandi coordinates)",
+    "mapped_unique_mandis.csv (Agmarknet district mapping)",
+    "districts_geocoded_fixed.csv (curated geocoded district coordinates)"
+  ],
+  "quality_guarantee": "All coordinates validated within Indian geographic boundaries (Lat 6-38, Lon 68-98). Zero fabricated or junk entries."
+}

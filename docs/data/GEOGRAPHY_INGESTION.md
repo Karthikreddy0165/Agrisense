@@ -62,11 +62,12 @@ This ensures **100% preservation of all 2,643 physical mandi entities** with zer
   "states_count": 30,
   "districts_count": 913,
   "mandis_count": 2643,
-  "mandis_with_coords": 151,
-  "mandis_null_coords": 2492,
+  "mandis_with_coords": 2548,
+  "mandis_null_coords": 95,
   "commodities_count": 15,
   "varieties_count": 262,
-  "verified_coords_count": 151,
-  "unresolved_count": 2492
+  "verified_coords_count": 2548,
+  "unresolved_count": 95,
+  "coverage_percentage": 96.41
 }
 ```

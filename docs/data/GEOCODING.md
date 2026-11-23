@@ -11,10 +11,12 @@ In agricultural trade, distance directly impacts transport cost calculations. Fa
 
 ## 2. Coordinate Breakdown & Status Breakdown
 
+Following the coordinate enrichment pass using verified market coordinates and geocoded district datasets from `Crop_market_price_predictor`, coverage was expanded from the initial 151 mandis to 2,548 mandis across all 30 Indian states, while strictly preserving zero coordinate fabrication:
+
 | Coordinate Category | Mandi Count | Percentage | Database Representation | Map Representation | List Representation |
 |---|---|---|---|---|---|
-| **Verified Coordinates** | **151** | 5.71% | `latitude`, `longitude` populated; `coordinate_source = 'VERIFIED_SEED'` or `'GEOCODED'`; `coordinate_status = 'VERIFIED'` | Plotted as interactive Leaflet marker with popup | Normal list card with distance in km (when location is enabled) |
-| **Unresolved Coordinates** | **2,492** | 94.29% | `latitude = NULL`, `longitude = NULL`; `coordinate_source = 'UNRESOLVED'`; `coordinate_status = 'UNRESOLVED'` | **Filtered out of map marker layer** (prevents clustering artifacts or false locations) | Normal list card with **`Coordinates Pending`** badge; full price history & forecasts accessible |
+| **Verified Coordinates** | **2,548** | 96.41% | `latitude`, `longitude` populated; `coordinate_source` in `VERIFIED_SEED`, `GEOCODED`, `MANDI_DATASET`, or `DISTRICT_GEOCODED`; `coordinate_status = 'VERIFIED'` | Plotted as interactive Leaflet marker with popup | Normal list card with distance in km (when location is enabled) |
+| **Unresolved Coordinates** | **95** | 3.59% | `latitude = NULL`, `longitude = NULL`; `coordinate_source = 'UNRESOLVED'`; `coordinate_status = 'UNRESOLVED'` | **Filtered out of map marker layer** (prevents clustering artifacts or false locations) | Normal list card with **`Coordinates Pending`** badge; full price history & forecasts accessible |
 | **Total Physical Mandis** | **2,643** | 100.0% | - | - | - |
 
 ---

@@ -1,11 +1,17 @@
 {
   "states_count": 30,
-  "districts_count": 913,
+  "districts_count": 936,
   "mandis_count": 2643,
-  "mandis_with_coords": 151,
-  "mandis_null_coords": 2492,
+  "mandis_with_coords": 2548,
+  "mandis_null_coords": 95,
   "commodities_count": 15,
   "varieties_count": 262,
-  "verified_coords_count": 151,
-  "unresolved_count": 2492
+  "verified_coords_count": 2548,
+  "unresolved_count": 95,
+  "coverage_percentage": 96.41,
+  "enrichment_sources": [
+    "Crop_market_price_predictor/maharashtra_feature_data.csv",
+    "Crop_market_price_predictor/mapped_unique_mandis.csv",
+    "Crop_market_price_predictor/districts_geocoded_fixed.csv"
+  ]
 }

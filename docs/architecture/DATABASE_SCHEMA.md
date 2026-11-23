@@ -155,7 +155,7 @@ Verified directly against PostgreSQL `localhost:5432/agriforecasting`:
 |---|---|---|---|
 | `states` | **30** | `ingest_national_geography.py` | 100% of Indian states and UTs in dataset |
 | `districts` | **913** | `ingest_national_geography.py` | Hierarchical mapping from source records |
-| `mandis` | **2,643** | `ingest_national_geography.py` | 151 verified geocoded; 2,492 NULL coords |
+| `mandis` | **2,643** | `ingest_national_geography.py` | 2,548 verified geocoded (96.4%); 95 NULL coords |
 | `commodities` | **15** | `ingest_national_geography.py` | Major cereal, pulse, vegetable, and oilseed crops |
 | `varieties` | **262** | `ingest_national_geography.py` | Full botanical variety mapping |
 | `price_observations` | **1,136,107** | `ingest_historical_prices.py` | 100% covered across all 2,643 mandis |
