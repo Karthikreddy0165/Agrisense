@@ -1,4 +1,4 @@
-export type CommodityCategory = 'vegetable' | 'grain' | 'oilseed' | 'spice' | 'fibre';
+export type CommodityCategory = 'vegetable' | 'grain' | 'oilseed' | 'spice' | 'fibre' | 'fruit';
 
 export interface Variety {
   id: string;

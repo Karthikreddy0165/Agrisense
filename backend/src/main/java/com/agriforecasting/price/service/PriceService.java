@@ -1,6 +1,9 @@
 package com.agriforecasting.price.service;
 
 import com.agriforecasting.config.ForecastConfig;
+import com.agriforecasting.market.domain.Mandi;
+import com.agriforecasting.market.dto.MandiCommodityDto;
+import com.agriforecasting.market.repository.MandiRepository;
 import com.agriforecasting.price.domain.PriceObservation;
 import com.agriforecasting.price.dto.PriceHistoryResponse;
 import com.agriforecasting.price.dto.PriceObservationDto;
@@ -21,14 +24,28 @@ import java.util.stream.Collectors;
 public class PriceService {
 
     private final PriceObservationRepository priceObservationRepository;
+    private final MandiRepository mandiRepository;
 
-    public PriceService(PriceObservationRepository priceObservationRepository) {
+    public PriceService(PriceObservationRepository priceObservationRepository,
+                        MandiRepository mandiRepository) {
         this.priceObservationRepository = priceObservationRepository;
+        this.mandiRepository = mandiRepository;
+    }
+
+    public String resolveCanonicalMandiId(String mandiId) {
+        if (mandiId == null || mandiId.isBlank()) return mandiId;
+        if (mandiRepository.existsById(mandiId)) return mandiId;
+        List<Mandi> matches = mandiRepository.filterMandis(null, null, null, mandiId);
+        if (!matches.isEmpty()) {
+            return matches.get(0).getId();
+        }
+        return mandiId;
     }
 
     public Optional<PriceObservationDto> getLatestPrice(String mandiId, String commodityId) {
+        String effectiveMandiId = resolveCanonicalMandiId(mandiId);
         return priceObservationRepository
-                .findTopByMandiIdAndCommodityIdOrderByObservationDateDesc(mandiId, commodityId)
+                .findTopByMandiIdAndCommodityIdOrderByObservationDateDesc(effectiveMandiId, commodityId)
                 .map(this::toDto);
     }
 
@@ -37,6 +54,7 @@ public class PriceService {
     }
 
     public List<PriceObservationDto> getPriceHistory(String mandiId, String commodityId, String varietyId, Integer days) {
+        String effectiveMandiId = resolveCanonicalMandiId(mandiId);
         int windowDays = (days != null && days > 0) ? days : 90;
         LocalDate endDate = ForecastConfig.REFERENCE_DATE;
         LocalDate startDate = endDate.minusDays(windowDays - 1L);
@@ -45,16 +63,16 @@ public class PriceService {
         if (varietyId != null && !varietyId.isBlank() && !"standard".equalsIgnoreCase(varietyId)) {
             list = priceObservationRepository
                     .findByMandiIdAndCommodityIdAndVarietyIdAndObservationDateBetweenOrderByObservationDateAsc(
-                            mandiId, commodityId, varietyId, startDate, endDate);
+                            effectiveMandiId, commodityId, varietyId, startDate, endDate);
             if (list.isEmpty()) {
                 list = priceObservationRepository
                         .findByMandiIdAndCommodityIdAndObservationDateBetweenOrderByObservationDateAsc(
-                                mandiId, commodityId, startDate, endDate);
+                                effectiveMandiId, commodityId, startDate, endDate);
             }
         } else {
             list = priceObservationRepository
                     .findByMandiIdAndCommodityIdAndObservationDateBetweenOrderByObservationDateAsc(
-                            mandiId, commodityId, startDate, endDate);
+                            effectiveMandiId, commodityId, startDate, endDate);
         }
 
         // If no records in fixed recent window, retrieve the latest available historical observations
@@ -62,14 +80,14 @@ public class PriceService {
             Pageable pageable = PageRequest.of(0, windowDays, Sort.by("observationDate").descending());
             if (varietyId != null && !varietyId.isBlank() && !"standard".equalsIgnoreCase(varietyId)) {
                 list = priceObservationRepository.findByMandiIdAndCommodityIdAndVarietyIdOrderByObservationDateDesc(
-                        mandiId, commodityId, varietyId, pageable);
+                        effectiveMandiId, commodityId, varietyId, pageable);
                 if (list.isEmpty()) {
                     list = priceObservationRepository.findByMandiIdAndCommodityIdOrderByObservationDateDesc(
-                            mandiId, commodityId, pageable);
+                            effectiveMandiId, commodityId, pageable);
                 }
             } else {
                 list = priceObservationRepository.findByMandiIdAndCommodityIdOrderByObservationDateDesc(
-                        mandiId, commodityId, pageable);
+                        effectiveMandiId, commodityId, pageable);
             }
             List<PriceObservation> chronological = new ArrayList<>(list);
             Collections.reverse(chronological);
@@ -82,7 +100,8 @@ public class PriceService {
     }
 
     public PriceHistoryResponse getPriceHistoryDetails(String mandiId, String commodityId, String varietyId, Integer days) {
-        List<PriceObservationDto> dtos = getPriceHistory(mandiId, commodityId, varietyId, days);
+        String effectiveMandiId = resolveCanonicalMandiId(mandiId);
+        List<PriceObservationDto> dtos = getPriceHistory(effectiveMandiId, commodityId, varietyId, days);
 
         Double latestModal = null;
         Double previousModal = null;
@@ -111,7 +130,7 @@ public class PriceService {
         }
 
         return new PriceHistoryResponse(
-                mandiId,
+                effectiveMandiId,
                 commodityId,
                 varietyId != null ? varietyId : "standard",
                 latestModal,
@@ -127,12 +146,42 @@ public class PriceService {
     }
 
     public List<Double> getRecentModalPrices(String mandiId, String commodityId, int count) {
+        String effectiveMandiId = resolveCanonicalMandiId(mandiId);
         Pageable pageable = PageRequest.of(0, count, Sort.by("observationDate").descending());
         List<PriceObservation> obs = priceObservationRepository
-                .findByMandiIdAndCommodityIdOrderByObservationDateDesc(mandiId, commodityId, pageable);
+                .findByMandiIdAndCommodityIdOrderByObservationDateDesc(effectiveMandiId, commodityId, pageable);
         return obs.stream()
                 .map(PriceObservation::getModalPrice)
                 .collect(Collectors.toList());
+    }
+
+    public List<MandiCommodityDto> getTradedCommoditiesForMandi(String mandiId) {
+        String effectiveMandiId = resolveCanonicalMandiId(mandiId);
+        List<Object[]> rows = priceObservationRepository.findTradedCommoditiesByMandiId(effectiveMandiId);
+        List<MandiCommodityDto> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            String commId = (String) r[0];
+            String commName = (String) r[1];
+            Long count = (r[2] instanceof Number) ? ((Number) r[2]).longValue() : 0L;
+            LocalDate latestDate = null;
+            if (r[3] instanceof java.sql.Date) {
+                latestDate = ((java.sql.Date) r[3]).toLocalDate();
+            } else if (r[3] instanceof LocalDate) {
+                latestDate = (LocalDate) r[3];
+            }
+            Double latestModal = priceObservationRepository
+                    .findTopByMandiIdAndCommodityIdOrderByObservationDateDesc(effectiveMandiId, commId)
+                    .map(PriceObservation::getModalPrice)
+                    .orElse(null);
+            result.add(new MandiCommodityDto(
+                    commId,
+                    commName != null ? commName : commId,
+                    count,
+                    latestDate,
+                    latestModal
+            ));
+        }
+        return result;
     }
 
     private PriceObservationDto toDto(PriceObservation o) {

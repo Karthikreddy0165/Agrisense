@@ -109,6 +109,14 @@ export interface ForecastResult {
   predictions: PredictionItem[];
 }
 
+export interface TradedCommodityItem {
+  commodityId: string;
+  commodityName: string;
+  observationCount: number;
+  latestDate: string;
+  latestModalPrice: number;
+}
+
 async function fetchWithFallback<T>(url: string, fallback: () => T): Promise<T> {
   try {
     const controller = new AbortController();
@@ -178,6 +186,13 @@ export const ApiService = {
       ? `${API_BASE_URL}/mandis/${encodeURIComponent(mandiId)}?${qs}`
       : `${API_BASE_URL}/mandis/${encodeURIComponent(mandiId)}`;
     return fetchWithFallback(url, () => MANDIS.find((m) => m.id === mandiId) || null);
+  },
+
+  async getMandiCommodities(mandiId: string): Promise<TradedCommodityItem[]> {
+    return fetchWithFallback<TradedCommodityItem[]>(
+      `${API_BASE_URL}/mandis/${encodeURIComponent(mandiId)}/commodities`,
+      () => []
+    );
   },
 
   async getNearbyMandis(lat?: number, lon?: number, radiusKm?: number, commodityId?: string) {

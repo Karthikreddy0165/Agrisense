@@ -95,4 +95,10 @@ public class PriceController {
             @RequestParam(required = false, defaultValue = "90") Integer days) {
         return getSummary(mandiId, commodityId, varietyId, days);
     }
+
+    @GetMapping("/{mandiId}/commodities")
+    public ResponseEntity<ApiResponse<List<com.agriforecasting.market.dto.MandiCommodityDto>>> getMandiCommodities(
+            @PathVariable String mandiId) {
+        return ResponseEntity.ok(ApiResponse.ok(priceService.getTradedCommoditiesForMandi(mandiId)));
+    }
 }

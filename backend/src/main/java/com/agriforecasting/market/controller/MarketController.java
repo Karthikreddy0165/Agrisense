@@ -2,9 +2,11 @@ package com.agriforecasting.market.controller;
 
 import com.agriforecasting.common.ApiResponse;
 import com.agriforecasting.market.dto.DistrictDto;
+import com.agriforecasting.market.dto.MandiCommodityDto;
 import com.agriforecasting.market.dto.MandiDto;
 import com.agriforecasting.market.dto.StateDto;
 import com.agriforecasting.market.service.MarketService;
+import com.agriforecasting.price.service.PriceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,9 +17,11 @@ import java.util.List;
 public class MarketController {
 
     private final MarketService marketService;
+    private final PriceService priceService;
 
-    public MarketController(MarketService marketService) {
+    public MarketController(MarketService marketService, PriceService priceService) {
         this.marketService = marketService;
+        this.priceService = priceService;
     }
 
     @GetMapping("/states")
@@ -74,5 +78,11 @@ public class MarketController {
         Double effectiveLon = longitude != null ? longitude : lon;
         List<MandiDto> nearby = marketService.getNearbyMandis(effectiveLat, effectiveLon, radiusKm, commodityId);
         return ResponseEntity.ok(ApiResponse.ok(nearby));
+    }
+
+    @GetMapping("/mandis/{mandiId}/commodities")
+    public ResponseEntity<ApiResponse<List<MandiCommodityDto>>> getMandiCommodities(
+            @PathVariable String mandiId) {
+        return ResponseEntity.ok(ApiResponse.ok(priceService.getTradedCommoditiesForMandi(mandiId)));
     }
 }

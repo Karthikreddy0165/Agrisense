@@ -127,4 +127,65 @@ export const COMMODITIES: Commodity[] = [
       { id: 'maize-hybrid', commodityId: 'maize', name: 'Hybrid Corn' },
     ]
   },
+  {
+    id: 'green-chilli',
+    name: 'Green Chilli',
+    category: 'spice',
+    unit: '₹/quintal',
+    slug: 'green-chilli',
+    description: 'Fresh pungent green chillies',
+    varieties: [
+      { id: 'green-chilli-standard', commodityId: 'green-chilli', name: 'Standard Green' },
+      { id: 'green-chilli-local', commodityId: 'green-chilli', name: 'Local Desi' },
+    ]
+  },
+  {
+    id: 'chili-red',
+    name: 'Chili Red',
+    category: 'spice',
+    unit: '₹/quintal',
+    slug: 'chili-red',
+    description: 'Fresh and dry red chillies',
+    varieties: [
+      { id: 'chili-red-standard', commodityId: 'chili-red', name: 'Standard Red' },
+      { id: 'chili-red-guntur', commodityId: 'chili-red', name: 'Guntur' },
+    ]
+  },
+  {
+    id: 'banana',
+    name: 'Banana',
+    category: 'fruit',
+    unit: '₹/quintal',
+    slug: 'banana',
+    description: 'Fresh commercial bananas',
+    varieties: [
+      { id: 'banana-robusta', commodityId: 'banana', name: 'Robusta' },
+      { id: 'banana-cavendish', commodityId: 'banana', name: 'Grand Naine' },
+      { id: 'banana-local', commodityId: 'banana', name: 'Local' },
+    ]
+  },
+  {
+    id: 'groundnut',
+    name: 'Groundnut',
+    category: 'oilseed',
+    unit: '₹/quintal',
+    slug: 'groundnut',
+    description: 'Raw pod and shelled groundnut (peanut)',
+    varieties: [
+      { id: 'groundnut-pod', commodityId: 'groundnut', name: 'Pod with Shell' },
+      { id: 'groundnut-bold', commodityId: 'groundnut', name: 'Bold Kernel' },
+    ]
+  },
+  {
+    id: 'water-melon',
+    name: 'Water Melon',
+    category: 'fruit',
+    unit: '₹/quintal',
+    slug: 'water-melon',
+    description: 'Fresh juicy watermelons',
+    varieties: [
+      { id: 'water-melon-standard', commodityId: 'water-melon', name: 'Standard Dark' },
+      { id: 'water-melon-striped', commodityId: 'water-melon', name: 'Striped Round' },
+    ]
+  },
 ];
