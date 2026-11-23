@@ -17,6 +17,7 @@ import {
   X,
   AlertCircle,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,11 +25,10 @@ import { Badge } from '@/components/ui/badge';
 import { InteractiveMandiMap } from '@/components/map/InteractiveMandiMap';
 import { STATES as SEED_STATES, DISTRICTS as SEED_DISTRICTS, MANDIS as SEED_MANDIS } from '@/lib/data/geography';
 import { COMMODITIES } from '@/lib/data/commodities';
-import { getHistoricalPricesForPair, DATA_THROUGH_DATE } from '@/lib/data/historical-prices';
 import { useSavedMarkets } from '@/lib/hooks/useSavedMarkets';
 import { useLocation } from '@/lib/context/LocationContext';
 import { useLanguage } from '@/lib/context/LanguageContext';
-import { formatPrice, formatDate } from '@/lib/utils/formatters';
+import { formatPrice } from '@/lib/utils/formatters';
 import { ApiService } from '@/lib/services/api';
 import { cn } from '@/lib/utils/cn';
 
@@ -81,12 +81,36 @@ export default function NearbyMandisPage() {
       .finally(() => setLoadingMandis(false));
   }, [selectedCommodity]);
 
-  // When location is detected, set initial radius filter
+  // Synchronize initial state with saved location state if present
   useEffect(() => {
-    if (coordinates && selectedRadius === null) {
+    if (locationStateId && selectedState === 'all') {
+      setSelectedState(locationStateId);
+    }
+  }, [locationStateId]);
+
+  // Effective reference coordinates (User GPS/Manual coords or State reference mandi)
+  const effectiveCoords = useMemo(() => {
+    if (coordinates && coordinates.lat != null && coordinates.lon != null) {
+      return coordinates;
+    }
+    const targetState = selectedState !== 'all' ? selectedState : locationStateId;
+    if (targetState) {
+      const stateMandi = allMandis.find(
+        (m) => m.stateId === targetState && m.latitude != null && m.longitude != null
+      );
+      if (stateMandi && stateMandi.latitude != null && stateMandi.longitude != null) {
+        return { lat: stateMandi.latitude, lon: stateMandi.longitude };
+      }
+    }
+    return null;
+  }, [coordinates, selectedState, locationStateId, allMandis]);
+
+  // When location or reference is available and radius hasn't been chosen yet, focus locally
+  useEffect(() => {
+    if (effectiveCoords && selectedRadius === null) {
       setSelectedRadius(100);
     }
-  }, [coordinates, selectedRadius]);
+  }, [effectiveCoords, selectedRadius]);
 
   // Sync scroll when marker is clicked on map
   const handleSelectMandiFromMap = (id: string) => {
@@ -97,7 +121,7 @@ export default function NearbyMandisPage() {
     }
   };
 
-  // State lookup map for speed
+  // State lookup map for quick label matching
   const stateLookup = useMemo(() => {
     const map = new Map<string, string>();
     statesList.forEach((s) => map.set(s.id, s.name));
@@ -106,15 +130,16 @@ export default function NearbyMandisPage() {
 
   // Calculate distance & live prices for all mandis
   const mandisWithCalculations = useMemo(() => {
+    const refCoords = effectiveCoords;
     return allMandis.map((mandi) => {
       let distance: number | undefined = undefined;
-      if (coordinates && mandi.latitude != null && mandi.longitude != null) {
+      if (refCoords && mandi.latitude != null && mandi.longitude != null) {
         const R = 6371.0;
-        const dLat = ((mandi.latitude - coordinates.lat) * Math.PI) / 180;
-        const dLon = ((mandi.longitude - coordinates.lon) * Math.PI) / 180;
+        const dLat = ((mandi.latitude - refCoords.lat) * Math.PI) / 180;
+        const dLon = ((mandi.longitude - refCoords.lon) * Math.PI) / 180;
         const a =
           Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((coordinates.lat * Math.PI) / 180) *
+          Math.cos((refCoords.lat * Math.PI) / 180) *
             Math.cos((mandi.latitude * Math.PI) / 180) *
             Math.sin(dLon / 2) *
             Math.sin(dLon / 2);
@@ -134,7 +159,7 @@ export default function NearbyMandisPage() {
         hasCoords: mandi.latitude != null && mandi.longitude != null,
       };
     });
-  }, [allMandis, coordinates, stateLookup]);
+  }, [allMandis, effectiveCoords, stateLookup]);
 
   // Filter & Sort
   const filteredMandis = useMemo(() => {
@@ -145,7 +170,7 @@ export default function NearbyMandisPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (m) =>
-          m.name.toLowerCase().includes(q) ||
+          (m.name && m.name.toLowerCase().includes(q)) ||
           (m.fullName && m.fullName.toLowerCase().includes(q)) ||
           (m.districtId && m.districtId.toLowerCase().includes(q)) ||
           (m.stateName && m.stateName.toLowerCase().includes(q))
@@ -157,8 +182,8 @@ export default function NearbyMandisPage() {
       result = result.filter((m) => m.stateId === selectedState);
     }
 
-    // Distance radius filter
-    if (selectedRadius != null && coordinates) {
+    // Distance radius filter (enabled when reference coords available)
+    if (selectedRadius != null && effectiveCoords) {
       result = result.filter((m) => m.distanceKm != null && m.distanceKm <= selectedRadius);
     }
 
@@ -180,7 +205,7 @@ export default function NearbyMandisPage() {
     });
 
     return result;
-  }, [mandisWithCalculations, searchQuery, selectedState, selectedRadius, coordinates, sortBy]);
+  }, [mandisWithCalculations, searchQuery, selectedState, selectedRadius, effectiveCoords, sortBy]);
 
   // Reset pagination visible count when filters change
   useEffect(() => {
@@ -191,6 +216,7 @@ export default function NearbyMandisPage() {
     return filteredMandis.slice(0, visibleCount);
   }, [filteredMandis, visibleCount]);
 
+  // High performance map markers list
   const mapMandis = useMemo(() => {
     return filteredMandis
       .filter((m) => m.hasCoords)
@@ -208,7 +234,7 @@ export default function NearbyMandisPage() {
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
     selectedState !== 'all' ||
-    (selectedRadius != null && coordinates != null);
+    (selectedRadius != null && effectiveCoords != null);
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -217,13 +243,20 @@ export default function NearbyMandisPage() {
     setSortBy('distance');
   };
 
+  const handleRadiusClick = (r: number | null) => {
+    setSelectedRadius(r);
+    if (r !== null && !effectiveCoords) {
+      detectLocation();
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title & Context Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{t('nav.nearby')}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{t('nav.nearby', 'Market Explorer')}</h1>
             <p className="text-xs text-slate-500 mt-1">
               {locationStatus === 'DETECTED'
                 ? `${t('loc.detected')}: ${locationLabel}`
@@ -231,7 +264,8 @@ export default function NearbyMandisPage() {
                 ? `${t('loc.manual')}: ${locationLabel}`
                 : locationStatus === 'DENIED'
                 ? t('loc.denied')
-                : t('loc.allIndia')} &bull; Showing {filteredMandis.length} of {allMandis.length} mandis across {statesList.length} States
+                : t('loc.allIndia', 'All India Overview')}{' '}
+              &bull; Showing {filteredMandis.length} of {allMandis.length} mandis across {statesList.length} States
             </p>
           </div>
 
@@ -241,7 +275,7 @@ export default function NearbyMandisPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-800 border border-green-200 rounded-lg text-xs font-semibold hover:bg-green-100 transition-colors"
             >
               <Navigation className="w-3.5 h-3.5 text-green-700" />
-              <span>{t('loc.useLocation')}</span>
+              <span>{t('loc.useLocation', 'Detect GPS Location')}</span>
             </button>
           </div>
         </div>
@@ -253,7 +287,7 @@ export default function NearbyMandisPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder={t('filter.search')}
+              placeholder={t('filter.search', 'Search market, district or state…')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 h-9 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-green-700 focus:outline-none"
@@ -308,9 +342,9 @@ export default function NearbyMandisPage() {
               onChange={(e) => setSortBy(e.target.value as any)}
               className="w-full h-9 px-3 text-xs border border-slate-200 rounded-lg bg-white text-slate-800 font-medium focus:ring-2 focus:ring-green-700 focus:outline-none"
             >
-              <option value="distance">{t('filter.nearest')}</option>
-              <option value="price-desc">{t('filter.priceHigh')}</option>
-              <option value="price-asc">{t('filter.priceLow')}</option>
+              <option value="distance">{t('filter.nearest', 'Nearest Distance')}</option>
+              <option value="price-desc">{t('filter.priceHigh', 'Price: High to Low')}</option>
+              <option value="price-asc">{t('filter.priceLow', 'Price: Low to High')}</option>
             </select>
           </div>
         </div>
@@ -318,9 +352,9 @@ export default function NearbyMandisPage() {
         {/* Radius Pills & Filter Actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-100">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold text-slate-500 mr-1">{t('filter.radius')}:</span>
+            <span className="text-xs font-semibold text-slate-500 mr-1">{t('filter.radius', 'Distance Radius')}:</span>
             <button
-              onClick={() => setSelectedRadius(null)}
+              onClick={() => handleRadiusClick(null)}
               className={cn(
                 'px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
                 selectedRadius === null
@@ -333,7 +367,7 @@ export default function NearbyMandisPage() {
             {RADIUS_OPTIONS.map((r) => (
               <button
                 key={r}
-                onClick={() => setSelectedRadius(r)}
+                onClick={() => handleRadiusClick(r)}
                 className={cn(
                   'px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
                   selectedRadius === r
@@ -354,10 +388,26 @@ export default function NearbyMandisPage() {
               className="text-xs text-slate-600 h-7 px-2.5"
             >
               <X className="w-3.5 h-3.5 mr-1" />
-              {t('btn.clearFilters')}
+              {t('btn.clearFilters', 'Clear Filters')}
             </Button>
           )}
         </div>
+
+        {/* Informative prompt if user selected a radius without an active location */}
+        {selectedRadius !== null && !effectiveCoords && (
+          <div className="mt-3 p-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-800">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Location needed to calculate distances for &le; {selectedRadius} km range.</span>
+            </div>
+            <button
+              onClick={() => detectLocation()}
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded text-[11px] transition-colors shadow-sm"
+            >
+              Detect Location
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Mobile View Toggle */}
@@ -370,7 +420,7 @@ export default function NearbyMandisPage() {
           )}
         >
           <ListIcon className="w-3.5 h-3.5" />
-          <span>List View</span>
+          <span>List View ({filteredMandis.length})</span>
         </button>
         <button
           onClick={() => setMobileView('map')}
@@ -380,7 +430,7 @@ export default function NearbyMandisPage() {
           )}
         >
           <MapIcon className="w-3.5 h-3.5" />
-          <span>Map View ({mapMandis.length} mapped)</span>
+          <span>Map View ({mapMandis.length})</span>
         </button>
       </div>
 
@@ -397,7 +447,7 @@ export default function NearbyMandisPage() {
             mandis={mapMandis}
             selectedMandiId={selectedMandiId}
             onSelectMandi={handleSelectMandiFromMap}
-            userLocation={coordinates}
+            userLocation={effectiveCoords}
           />
         </div>
 
@@ -417,7 +467,7 @@ export default function NearbyMandisPage() {
                   Try expanding your distance radius or clearing the state and search filters.
                 </p>
                 <Button size="sm" onClick={clearAllFilters} className="mt-3 text-xs bg-green-700 text-white">
-                  {t('btn.clearFilters')}
+                  {t('btn.clearFilters', 'Reset All Filters')}
                 </Button>
               </div>
             </Card>
@@ -494,7 +544,7 @@ export default function NearbyMandisPage() {
                             </>
                           ) : (
                             <span className="text-xs font-semibold text-slate-400">
-                              {t('price.unavailable')}
+                              {t('price.unavailable', 'Price pending')}
                             </span>
                           )}
                         </div>
@@ -513,10 +563,10 @@ export default function NearbyMandisPage() {
                           )}
                         >
                           {mandi.trendDirection === 'Rising'
-                            ? t('price.trend.rising')
+                            ? t('price.trend.rising', 'Rising')
                             : mandi.trendDirection === 'Falling'
-                            ? t('price.trend.falling')
-                            : t('price.trend.stable')}
+                            ? t('price.trend.falling', 'Falling')
+                            : t('price.trend.stable', 'Stable')}
                         </span>
                       </div>
                     </div>
@@ -529,7 +579,7 @@ export default function NearbyMandisPage() {
                       >
                         <Button variant="outline" size="sm" className="w-full text-xs text-slate-700 h-8">
                           <Store className="w-3.5 h-3.5 mr-1" />
-                          {t('btn.viewMarket')}
+                          {t('btn.viewMarket', 'Market Profile')}
                         </Button>
                       </Link>
 
@@ -540,7 +590,7 @@ export default function NearbyMandisPage() {
                       >
                         <Button size="sm" className="w-full text-xs bg-green-700 hover:bg-green-800 text-white h-8">
                           <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                          {t('btn.viewForecast')}
+                          {t('btn.viewForecast', '14-Day Forecast')}
                         </Button>
                       </Link>
                     </div>

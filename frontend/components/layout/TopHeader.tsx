@@ -103,7 +103,31 @@ export function TopHeader() {
 
   const handleApplyManual = () => {
     if (tempState) {
-      setManualLocation(tempState, tempDistrict || undefined, tempMandi || undefined);
+      const selectedMandiObj = availableMandis.find((m) => m.id === tempMandi);
+      const selectedDistrictObj = availableDistricts.find((d) => d.id === tempDistrict);
+      const selectedStateObj = statesList.find((s) => s.id === tempState);
+
+      let coords: { lat: number; lon: number } | undefined = undefined;
+      let label = selectedStateObj?.name || tempState;
+
+      if (selectedMandiObj && selectedMandiObj.latitude != null && selectedMandiObj.longitude != null) {
+        coords = { lat: selectedMandiObj.latitude, lon: selectedMandiObj.longitude };
+        label = `${selectedMandiObj.name}, ${selectedStateObj?.name || ''}`;
+      } else if (selectedDistrictObj) {
+        const firstWithCoords = availableMandis.find((m) => m.latitude != null && m.longitude != null);
+        if (firstWithCoords && firstWithCoords.latitude != null && firstWithCoords.longitude != null) {
+          coords = { lat: firstWithCoords.latitude, lon: firstWithCoords.longitude };
+        }
+        label = `${selectedDistrictObj.name}, ${selectedStateObj?.name || ''}`;
+      } else if (selectedStateObj) {
+        const firstWithCoords = availableMandis.find((m) => m.latitude != null && m.longitude != null);
+        if (firstWithCoords && firstWithCoords.latitude != null && firstWithCoords.longitude != null) {
+          coords = { lat: firstWithCoords.latitude, lon: firstWithCoords.longitude };
+        }
+        label = selectedStateObj.name;
+      }
+
+      setManualLocation(tempState, tempDistrict || undefined, tempMandi || undefined, coords, label);
     }
     setShowPicker(false);
   };

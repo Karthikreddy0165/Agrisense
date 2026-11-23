@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { STATES, DISTRICTS, MANDIS } from '@/lib/data/geography';
+import { STATES as SEED_STATES, DISTRICTS as SEED_DISTRICTS, MANDIS as SEED_MANDIS } from '@/lib/data/geography';
+import { ApiService } from '@/lib/services/api';
 
 export type LocationStatus =
   | 'DETECTING'
@@ -11,12 +12,12 @@ export type LocationStatus =
   | 'UNAVAILABLE'
   | 'NOT_SET';
 
-interface Coordinates {
+export interface Coordinates {
   lat: number;
   lon: number;
 }
 
-interface LocationContextType {
+export interface LocationContextType {
   coordinates: Coordinates | null;
   locationLabel: string;
   status: LocationStatus;
@@ -24,7 +25,13 @@ interface LocationContextType {
   districtId: string | null;
   mandiId: string | null;
   detectLocation: () => Promise<void>;
-  setManualLocation: (stateId: string, districtId?: string, mandiId?: string) => void;
+  setManualLocation: (
+    stateId: string,
+    districtId?: string,
+    mandiId?: string,
+    customCoords?: Coordinates,
+    customLabel?: string
+  ) => void;
   clearLocation: () => void;
 }
 
@@ -32,30 +39,13 @@ const LocationContext = createContext<LocationContextType | undefined>(undefined
 
 const STORAGE_KEY = 'agri_manual_location';
 
-function findNearestMandi(lat: number, lon: number) {
-  let nearest = MANDIS[0];
-  let minDistance = Infinity;
-
-  for (const m of MANDIS) {
-    if (m.latitude == null || m.longitude == null) continue;
-    const R = 6371.0;
-    const dLat = ((m.latitude - lat) * Math.PI) / 180;
-    const dLon = ((m.longitude - lon) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat * Math.PI) / 180) *
-        Math.cos((m.latitude * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const dist = R * c;
-    if (dist < minDistance) {
-      minDistance = dist;
-      nearest = m;
-    }
-  }
-
-  return { mandi: nearest, distanceKm: Math.round(minDistance * 10) / 10 };
+interface StoredLocation {
+  stateId: string | null;
+  districtId: string | null;
+  mandiId: string | null;
+  coordinates: Coordinates | null;
+  locationLabel: string;
+  status: LocationStatus;
 }
 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
@@ -66,35 +56,70 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [districtId, setDistrictId] = useState<string | null>(null);
   const [mandiId, setMandiId] = useState<string | null>(null);
 
-  // Initialize from localStorage or leave as NOT_SET (never default silently to Bangalore!)
+  // Initialize from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed: StoredLocation = JSON.parse(saved);
         if (parsed.stateId) {
-          const st = STATES.find((s) => s.id === parsed.stateId);
-          const dt = DISTRICTS.find((d) => d.id === parsed.districtId);
-          const mn = MANDIS.find((m) => m.id === parsed.mandiId);
-
           setStateId(parsed.stateId);
           setDistrictId(parsed.districtId || null);
           setMandiId(parsed.mandiId || null);
-          if (mn && mn.latitude != null && mn.longitude != null) {
-            setCoordinates({ lat: mn.latitude, lon: mn.longitude });
-            setLocationLabel(`${mn.name}, ${st?.name || 'India'} (Saved)`);
-          } else if (mn) {
-            setLocationLabel(`${mn.name}, ${st?.name || 'India'} (Saved)`);
-          } else if (dt) {
-            setLocationLabel(`${dt.name}, ${st?.name || 'India'} (Saved)`);
-          } else if (st) {
-            setLocationLabel(`${st.name} (Saved)`);
+          setStatus(parsed.status || 'MANUAL');
+
+          // If coordinates were previously saved, restore them immediately
+          if (parsed.coordinates && parsed.coordinates.lat != null && parsed.coordinates.lon != null) {
+            setCoordinates(parsed.coordinates);
+            setLocationLabel(parsed.locationLabel || 'Saved Location');
+          } else {
+            // Asynchronously resolve coordinates for national mandi or state
+            setLocationLabel(parsed.locationLabel || 'Resolving location…');
+            if (parsed.mandiId) {
+              ApiService.getMandi(parsed.mandiId).then((m) => {
+                if (m && m.latitude != null && m.longitude != null) {
+                  const coords: Coordinates = { lat: m.latitude, lon: m.longitude };
+                  setCoordinates(coords);
+                  const lbl = parsed.locationLabel || `${m.name}, ${parsed.stateId?.toUpperCase()} (Saved)`;
+                  setLocationLabel(lbl);
+                  localStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify({
+                      ...parsed,
+                      coordinates: coords,
+                      locationLabel: lbl,
+                    })
+                  );
+                }
+              });
+            } else if (parsed.stateId) {
+              ApiService.getMandis({ stateId: parsed.stateId }).then((mList) => {
+                const withCoords = mList?.find((m) => m.latitude != null && m.longitude != null);
+                if (withCoords) {
+                  const coords: Coordinates = { lat: withCoords.latitude!, lon: withCoords.longitude! };
+                  setCoordinates(coords);
+                  const lbl = parsed.locationLabel || `${parsed.stateId?.toUpperCase()} (Saved)`;
+                  setLocationLabel(lbl);
+                  localStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify({
+                      ...parsed,
+                      coordinates: coords,
+                      locationLabel: lbl,
+                    })
+                  );
+                }
+              });
+            }
           }
-          setStatus('MANUAL');
+        } else if (parsed.coordinates && parsed.coordinates.lat != null && parsed.coordinates.lon != null) {
+          setCoordinates(parsed.coordinates);
+          setLocationLabel(parsed.locationLabel || 'GPS Location');
+          setStatus(parsed.status || 'DETECTED');
         }
       }
     } catch {
-      // Ignore
+      // Ignore parse errors
     }
   }, []);
 
@@ -109,28 +134,53 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     setLocationLabel('Detecting location…');
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        setCoordinates({ lat, lon });
+        const coords: Coordinates = { lat, lon };
+        setCoordinates(coords);
 
-        // Resolve closest mandi and state
-        const { mandi, distanceKm } = findNearestMandi(lat, lon);
-        const st = STATES.find((s) => s.id === mandi.stateId);
-        const dt = DISTRICTS.find((d) => d.id === mandi.districtId);
-
-        setStateId(mandi.stateId);
-        setDistrictId(mandi.districtId);
-        setMandiId(mandi.id);
-        setStatus('DETECTED');
-
-        if (distanceKm < 35) {
-          setLocationLabel(`${mandi.name}, ${st?.name || ''} (GPS)`);
-        } else if (dt) {
-          setLocationLabel(`Near ${dt.name}, ${st?.name || ''} (GPS)`);
-        } else {
-          setLocationLabel(`${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E (GPS)`);
+        try {
+          const nearby = await ApiService.getNearbyMandis(lat, lon, 100);
+          if (nearby && nearby.length > 0) {
+            const nearest = nearby[0];
+            setStateId(nearest.stateId);
+            setDistrictId(nearest.districtId);
+            setMandiId(nearest.id);
+            setStatus('DETECTED');
+            const lbl = `${nearest.name}, ${nearest.stateId ? nearest.stateId.toUpperCase() : 'India'} (GPS)`;
+            setLocationLabel(lbl);
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({
+                stateId: nearest.stateId,
+                districtId: nearest.districtId,
+                mandiId: nearest.id,
+                coordinates: coords,
+                locationLabel: lbl,
+                status: 'DETECTED',
+              })
+            );
+            return;
+          }
+        } catch {
+          // Ignore API error and fall back to coordinate display
         }
+
+        const fallbackLbl = `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E (GPS)`;
+        setLocationLabel(fallbackLbl);
+        setStatus('DETECTED');
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            stateId: null,
+            districtId: null,
+            mandiId: null,
+            coordinates: coords,
+            locationLabel: fallbackLbl,
+            status: 'DETECTED',
+          })
+        );
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
@@ -141,48 +191,113 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           setLocationLabel('Unable to determine location');
         }
       },
-      { timeout: 7000, enableHighAccuracy: true }
+      { timeout: 8000, enableHighAccuracy: true }
     );
   }, []);
 
   const setManualLocation = useCallback(
-    (sId: string, dId?: string, mId?: string) => {
+    (
+      sId: string,
+      dId?: string,
+      mId?: string,
+      customCoords?: Coordinates,
+      customLabel?: string
+    ) => {
       setStateId(sId);
       setDistrictId(dId || null);
       setMandiId(mId || null);
       setStatus('MANUAL');
 
-      const st = STATES.find((s) => s.id === sId);
-      const dt = DISTRICTS.find((d) => d.id === dId);
-      const mn = MANDIS.find((m) => m.id === mId);
-
-      if (mn && mn.latitude != null && mn.longitude != null) {
-        setCoordinates({ lat: mn.latitude, lon: mn.longitude });
-        setLocationLabel(`${mn.name}, ${st?.name || ''}`);
-      } else if (mn) {
-        setLocationLabel(`${mn.name}, ${st?.name || ''}`);
-      } else if (dt) {
-        // Center of district if mandi not selected
-        const firstMandi = MANDIS.find((m) => m.districtId === dId && m.latitude != null && m.longitude != null);
-        if (firstMandi && firstMandi.latitude != null && firstMandi.longitude != null) {
-          setCoordinates({ lat: firstMandi.latitude, lon: firstMandi.longitude });
-        }
-        setLocationLabel(`${dt.name}, ${st?.name || ''}`);
-      } else if (st) {
-        const firstStateMandi = MANDIS.find((m) => m.stateId === sId && m.latitude != null && m.longitude != null);
-        if (firstStateMandi && firstStateMandi.latitude != null && firstStateMandi.longitude != null) {
-          setCoordinates({ lat: firstStateMandi.latitude, lon: firstStateMandi.longitude });
-        }
-        setLocationLabel(`${st.name}`);
+      // If coordinates are explicitly provided
+      if (customCoords && customCoords.lat != null && customCoords.lon != null) {
+        setCoordinates(customCoords);
+        const lbl = customLabel || `${sId.toUpperCase()} (Saved)`;
+        setLocationLabel(lbl);
+        try {
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+              stateId: sId,
+              districtId: dId || null,
+              mandiId: mId || null,
+              coordinates: customCoords,
+              locationLabel: lbl,
+              status: 'MANUAL',
+            })
+          );
+        } catch {}
+        return;
       }
 
-      try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ stateId: sId, districtId: dId, mandiId: mId })
-        );
-      } catch {
-        // Ignore
+      // Otherwise resolve coordinates asynchronously from national database
+      if (mId) {
+        ApiService.getMandi(mId).then((m) => {
+          if (m && m.latitude != null && m.longitude != null) {
+            const coords: Coordinates = { lat: m.latitude, lon: m.longitude };
+            setCoordinates(coords);
+            const lbl = customLabel || `${m.name}, ${sId.toUpperCase()} (Saved)`;
+            setLocationLabel(lbl);
+            try {
+              localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                  stateId: sId,
+                  districtId: dId || null,
+                  mandiId: mId,
+                  coordinates: coords,
+                  locationLabel: lbl,
+                  status: 'MANUAL',
+                })
+              );
+            } catch {}
+          }
+        });
+      } else if (dId) {
+        ApiService.getMandis({ districtId: dId }).then((mList) => {
+          const withCoords = mList?.find((m) => m.latitude != null && m.longitude != null);
+          if (withCoords) {
+            const coords: Coordinates = { lat: withCoords.latitude!, lon: withCoords.longitude! };
+            setCoordinates(coords);
+            const lbl = customLabel || `${dId.replace(/^[a-z]{2}-/, '')}, ${sId.toUpperCase()} (Saved)`;
+            setLocationLabel(lbl);
+            try {
+              localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                  stateId: sId,
+                  districtId: dId,
+                  mandiId: null,
+                  coordinates: coords,
+                  locationLabel: lbl,
+                  status: 'MANUAL',
+                })
+              );
+            } catch {}
+          }
+        });
+      } else if (sId) {
+        ApiService.getMandis({ stateId: sId }).then((mList) => {
+          const withCoords = mList?.find((m) => m.latitude != null && m.longitude != null);
+          if (withCoords) {
+            const coords: Coordinates = { lat: withCoords.latitude!, lon: withCoords.longitude! };
+            setCoordinates(coords);
+            const lbl = customLabel || `${sId.toUpperCase()} (Saved)`;
+            setLocationLabel(lbl);
+            try {
+              localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                  stateId: sId,
+                  districtId: null,
+                  mandiId: null,
+                  coordinates: coords,
+                  locationLabel: lbl,
+                  status: 'MANUAL',
+                })
+              );
+            } catch {}
+          }
+        });
       }
     },
     []
